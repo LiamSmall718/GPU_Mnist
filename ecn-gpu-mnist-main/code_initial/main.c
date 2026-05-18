@@ -106,10 +106,10 @@ int main(int argc, char *argv[])
 {
     srand(time(0));
     unsigned datasize, ntest;
-    image* train_img = read_images("train-images-idx3-ubyte", &datasize);
-    byte* train_label = read_labels("train-labels-idx1-ubyte", &datasize);
-    image* test_img = read_images("t10k-images-idx3-ubyte", &ntest);
-    byte* test_label = read_labels("t10k-labels-idx1-ubyte", &ntest);
+    image* train_img = read_images("train-images.idx3-ubyte", &datasize);
+    byte* train_label = read_labels("train-labels.idx1-ubyte", &datasize);
+    image* test_img = read_images("t10k-images.idx3-ubyte", &ntest);
+    byte* test_label = read_labels("t10k-labels.idx1-ubyte", &ntest);
 
     ann_t * nn;
     double alpha = 0.05;
