@@ -1,4 +1,5 @@
 // Compile gcc -o ./ann main.c matrix.c ann.c mnist.c -lm
+// complie 2 : nvcc -O3 -arch=sm_75 -o ann main.c ann.c mnist.c matrix.c matrix_dot.cu -lm
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -126,7 +127,7 @@ int main(int argc, char *argv[])
     double *y = (double *) malloc(10 * minibatch_size * sizeof( double ));
     matrix_t *out = alloc_matrix(10, minibatch_size);
     
-    for (int epoch = 0; epoch < 40; epoch ++)
+    for (int epoch = 0; epoch < 10; epoch ++)
     {
         printf("start learning epoch %d\n", epoch);
 

@@ -87,7 +87,7 @@ void matrix_minus(matrix_t *m1, matrix_t *m2, matrix_t *res)
     }
 }
 
-void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res)
+void matrix_dot_cpu(matrix_t *m1, matrix_t *m2, matrix_t *res)
 {
     assert ( (m1->columns == m2->rows)  &&
              (m1->rows == res->rows)    &&

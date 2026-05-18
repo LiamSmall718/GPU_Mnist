@@ -24,7 +24,17 @@ void matrix_sum(matrix_t *m1, matrix_t *m2, matrix_t *res);
 
 void matrix_minus(matrix_t *m1, matrix_t *m2, matrix_t *res);
 
+void matrix_dot_cpu(matrix_t *m1, matrix_t *m2, matrix_t *res);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res);
+
+#ifdef __cplusplus
+}
+#endif
 
 void matrix_function(matrix_t *m1, double (*f)(double), matrix_t *res);
 
