@@ -5,6 +5,14 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
+// Variables globales GPU
+double *d_m1 = nullptr;
+double *d_m2 = nullptr;
+double *d_res = nullptr;
+size_t d_size_m1 = 0;
+size_t d_size_m2 = 0;
+size_t d_size_res = 0;
+
 matrix_t * alloc_matrix(unsigned rows, unsigned columns)
 {
     matrix_t * res = (matrix_t*) malloc( sizeof(matrix_t) );
@@ -61,6 +69,17 @@ void hadamard_product(matrix_t *m1, matrix_t *m2, matrix_t *res)
     }
 }
 
+__global__
+void matrix_sum_kernel(double *m1, double *m2, double *res, int size)
+{
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    
+    if (idx < size)
+    {
+        res[idx] = m1[idx] + m2[idx];
+    }
+}
+
 void matrix_sum(matrix_t *m1, matrix_t *m2, matrix_t *res)
 {
     assert ( (m1->columns == m2->columns)  &&
@@ -68,9 +87,37 @@ void matrix_sum(matrix_t *m1, matrix_t *m2, matrix_t *res)
              (m1->rows == m2->rows)        &&
              (m1->rows == res->rows));
 
-    for (int idx = 0; idx < m1->rows * m1->columns; idx ++)
-    { 
-        res->m[idx] = m1->m[idx] + m2->m[idx];
+    int size = m1->rows * m1->columns;
+    size_t size_bytes = size * sizeof(double);
+
+    double *d_m1, *d_m2, *d_res;
+    cudaMalloc(&d_m1, size_bytes);
+    cudaMalloc(&d_m2, size_bytes);
+    cudaMalloc(&d_res, size_bytes);
+
+    cudaMemcpy(d_m1, m1->m, size_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_m2, m2->m, size_bytes, cudaMemcpyHostToDevice);
+
+    int threadsPerBlock = 256;
+    int numBlocks = (size + 255) / 256;
+
+    matrix_sum_kernel<<<numBlocks, threadsPerBlock>>>(d_m1, d_m2, d_res, size);
+
+    cudaMemcpy(res->m, d_res, size_bytes, cudaMemcpyDeviceToHost);
+
+    cudaFree(d_m1);
+    cudaFree(d_m2);
+    cudaFree(d_res); 
+}
+
+__global__
+void matrix_minus_kernel(double *m1, double *m2, double *res, int size)
+{
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    
+    if (idx < size)
+    {
+        res[idx] = m1[idx] - m2[idx];
     }
 }
 
@@ -80,11 +127,28 @@ void matrix_minus(matrix_t *m1, matrix_t *m2, matrix_t *res)
              (m1->columns == res->columns) &&
              (m1->rows == m2->rows)        &&
              (m1->rows == res->rows));
-             
-    for (int idx = 0; idx < m1->rows * m1->columns; idx ++)
-    {
-        res->m[idx] = m1->m[idx] - m2->m[idx];
-    }
+
+    int size = m1->rows * m1->columns;
+    size_t size_bytes = size * sizeof(double);
+
+    double *d_m1, *d_m2, *d_res;
+    cudaMalloc(&d_m1, size_bytes);
+    cudaMalloc(&d_m2, size_bytes);
+    cudaMalloc(&d_res, size_bytes);
+
+    cudaMemcpy(d_m1, m1->m, size_bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_m2, m2->m, size_bytes, cudaMemcpyHostToDevice);
+
+    int threadsPerBlock = 256;
+    int numBlocks = (size + 255) / 256;
+
+    matrix_minus_kernel<<<numBlocks, threadsPerBlock>>>(d_m1, d_m2, d_res, size);
+
+    cudaMemcpy(res->m, d_res, size_bytes, cudaMemcpyDeviceToHost);
+
+    cudaFree(d_m1);
+    cudaFree(d_m2);
+    cudaFree(d_res); 
 }
 
 __global__
@@ -117,10 +181,22 @@ void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res)
     size_t size_m2  = m2->rows * m2->columns * sizeof(double);
     size_t size_res = res->rows * res->columns * sizeof(double);
 
-    double *d_m1, *d_m2, *d_res;
-    cudaMalloc(&d_m1,  size_m1);
-    cudaMalloc(&d_m2,  size_m2);
-    cudaMalloc(&d_res, size_res);
+    // Réalloue seulement si la taille a changé
+    if (size_m1 > d_size_m1) {
+        cudaFree(d_m1);
+        cudaMalloc(&d_m1, size_m1);
+        d_size_m1 = size_m1;
+    }
+    if (size_m2 > d_size_m2) {
+        cudaFree(d_m2);
+        cudaMalloc(&d_m2, size_m2);
+        d_size_m2 = size_m2;
+    }
+    if (size_res > d_size_res) {
+        cudaFree(d_res);
+        cudaMalloc(&d_res, size_res);
+        d_size_res = size_res;
+    }
 
     cudaMemcpy(d_m1, m1->m, size_m1, cudaMemcpyHostToDevice);
     cudaMemcpy(d_m2, m2->m, size_m2, cudaMemcpyHostToDevice);
@@ -135,10 +211,6 @@ void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res)
     );
 
     cudaMemcpy(res->m, d_res, size_res, cudaMemcpyDeviceToHost);
-
-    cudaFree(d_m1);
-    cudaFree(d_m2);
-    cudaFree(d_res);
 }
 
 void matrix_function(matrix_t *m1, double (*f)(double), matrix_t *res)
