@@ -87,27 +87,58 @@ void matrix_minus(matrix_t *m1, matrix_t *m2, matrix_t *res)
     }
 }
 
+__global__
+void matrix_dot_kernel(double *m1, double *m2, double *res,
+                       int m1_rows, int m1_columns, int m2_columns)
+{
+    int row = threadIdx.y + blockIdx.y * blockDim.y;
+    int col = threadIdx.x + blockIdx.x * blockDim.x;
+    
+    if (row < m1_rows && col < m2_columns)
+    {
+        double result = 0.0;
+        
+        for (int ii = 0; ii < m1_columns; ii++)
+        {
+            result += m1[ii + row * m1_columns] * m2[col + ii * m2_columns];
+        }
+        
+        res[col + row * m2_columns] = result;
+    }
+}
+
 void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res)
 {
-    assert ( (m1->columns == m2->rows)  &&
-             (m1->rows == res->rows)    &&
-             (m2->columns == res->columns));
+    assert((m1->columns == m2->rows) &&
+           (m1->rows == res->rows)   &&
+           (m2->columns == res->columns));
 
-    for (int row = 0; row < m1->rows; row ++)
-    {
-        for (int col = 0; col < m2->columns; col ++)
-        {
-            int idx = col + row * m2->columns;
-            double var = 0.0;
+    size_t size_m1  = m1->rows * m1->columns * sizeof(double);
+    size_t size_m2  = m2->rows * m2->columns * sizeof(double);
+    size_t size_res = res->rows * res->columns * sizeof(double);
 
-            for (int ii = 0; ii < m1->columns; ii++)
-            {
-                var += m1->m[ii + row * m1->columns] * m2->m[col + ii * m2->columns];
-            }
+    double *d_m1, *d_m2, *d_res;
+    cudaMalloc(&d_m1,  size_m1);
+    cudaMalloc(&d_m2,  size_m2);
+    cudaMalloc(&d_res, size_res);
 
-            res->m[idx] = var;
-        }
-    }
+    cudaMemcpy(d_m1, m1->m, size_m1, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_m2, m2->m, size_m2, cudaMemcpyHostToDevice);
+
+    dim3 threadsPerBlock(16, 16);
+    dim3 numBlocks((m2->columns + 15) / 16,
+                   (m1->rows    + 15) / 16);
+
+    matrix_dot_kernel<<<numBlocks, threadsPerBlock>>>(
+        d_m1, d_m2, d_res,
+        m1->rows, m1->columns, m2->columns
+    );
+
+    cudaMemcpy(res->m, d_res, size_res, cudaMemcpyDeviceToHost);
+
+    cudaFree(d_m1);
+    cudaFree(d_m2);
+    cudaFree(d_res);
 }
 
 void matrix_function(matrix_t *m1, double (*f)(double), matrix_t *res)
