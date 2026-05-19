@@ -12,6 +12,15 @@
 #include <string.h>
 #include <time.h>
 
+#include <cuda_runtime.h>
+
+#define CUDA_CHECK() do { \
+    cudaError_t err = cudaGetLastError(); \
+    if (err != cudaSuccess) \
+        printf("CUDA error at %s:%d : %s\n", __FILE__, __LINE__, cudaGetErrorString(err)); \
+} while(0)
+
+
 void populate_minibatch(double *x, double* y, unsigned* minibatch_idx, unsigned minibatch_size, image * img, unsigned img_size, byte* label, unsigned label_size);
 
 void zero_to_n(unsigned n, unsigned* t)
@@ -60,6 +69,7 @@ double accuracy(image* test_img, byte* test_label, unsigned datasize, unsigned m
         memcpy(nn->layers[0]->activations->m, x, 28*28 * minibatch_size * sizeof(double));     
         
         forward(nn, sigmoid);
+        cudaDeviceSynchronize(); 
         for (int col = 0; col < minibatch_size; col ++)
         {
             int idxTrainingData = col + i ;
@@ -137,9 +147,22 @@ int main(int argc, char *argv[])
         {
             populate_minibatch(x, y, shuffled_idx+i, minibatch_size, train_img, 28*28, train_label, 10);
             memcpy(nn->layers[0]->activations->m, x, 28 * 28 * minibatch_size * sizeof(double));
+            //printf("memcpy input ok\n");
+            forward(nn, sigmoid);
+            CUDA_CHECK();
+            cudaDeviceSynchronize();
+            //printf("forward ok\n");
+            memcpy(out->m, y, 10 * minibatch_size * sizeof(double));
+            //printf("memcpy out ok\n");
+            backward(nn, out, dsigmoid);
+            CUDA_CHECK();
+            cudaDeviceSynchronize();
+            //printf("backward ok\n");
+            
+            /*memcpy(nn->layers[0]->activations->m, x, 28 * 28 * minibatch_size * sizeof(double));
             forward(nn, sigmoid);
             memcpy(out->m, y, 10 * minibatch_size * sizeof(double));            
-            backward(nn, out, dsigmoid);            
+            backward(nn, out, dsigmoid);*/            
         }     
         printf("epoch %d accuracy %lf\n", epoch, accuracy(test_img, test_label, ntest, minibatch_size, nn));
     }

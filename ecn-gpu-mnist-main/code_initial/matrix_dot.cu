@@ -9,6 +9,16 @@
 
 #define TILE 16
 
+typedef double (*dev_fn_t)(double);
+
+__device__ double apply_fn(double x, int fn_id)
+{
+    if (fn_id == 0) return 1.0 / (1.0 + exp(-x));  // sigmoid
+    double s = 1.0 / (1.0 + exp(-x));
+    return s * (1.0 - s);  // dsigmoid
+}
+
+
 __global__ void k_dot(const double *A, const double *B, double *C,
                       int M, int K, int N)
 {
@@ -55,5 +65,44 @@ extern "C" void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res)
     if (err != cudaSuccess) {
         printf("CUDA error: %s\n", cudaGetErrorString(err));
     }
-    cudaDeviceSynchronize();
+    //cudaDeviceSynchronize();
 }
+
+__global__ void k_hadamard(const double *a, const double *b, double *c, int n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) c[i] = a[i] * b[i];
+}
+
+__global__ void k_sum(const double *a, const double *b, double *c, int n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) c[i] = a[i] + b[i];
+}
+
+__global__ void k_minus(const double *a, const double *b, double *c, int n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) c[i] = a[i] - b[i];
+}
+
+__global__ void k_scalar(const double *a, double s, double *c, int n)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) c[i] = a[i] * s;
+}
+
+__global__ void k_transpose(const double *src, double *dst, int rows, int cols)
+{
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    if (row < rows && col < cols)
+        dst[row + col * rows] = src[col + row * cols];
+}
+
+__global__ void k_function(const double *src, double *dst, int n, int fn_id)
+{
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) dst[i] = apply_fn(src[i], fn_id);
+}
+
