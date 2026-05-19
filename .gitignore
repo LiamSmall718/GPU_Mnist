@@ -1,2 +1,3 @@
 ecn-gpu-mnist-main/code_initial/ann
 *.o
+/.vscode
