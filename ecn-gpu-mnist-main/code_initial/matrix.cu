@@ -15,8 +15,8 @@ size_t d_size_res = 0;
 
 matrix_t * alloc_matrix(unsigned rows, unsigned columns)
 {
-    matrix_t * res = (matrix_t*) malloc( sizeof(matrix_t) );
-    res->m = (double *) calloc(columns * rows, sizeof(double));
+    matrix_t * res = (matrix_t*) malloc(sizeof(matrix_t));
+    cudaMallocManaged(&res->m, columns * rows * sizeof(double));  
     res->columns = columns;
     res->rows = rows;
     return res;
@@ -24,8 +24,7 @@ matrix_t * alloc_matrix(unsigned rows, unsigned columns)
 
 void destroy_matrix(matrix_t *m)
 {
-    //printf("free %p %p\n", m, m->m);
-    free(m->m);
+    cudaFree(m->m);  // au lieu de free
     free(m);
 }
 
@@ -69,6 +68,7 @@ void hadamard_product(matrix_t *m1, matrix_t *m2, matrix_t *res)
     }
 }
 
+/*
 __global__
 void matrix_sum_kernel(double *m1, double *m2, double *res, int size)
 {
@@ -88,26 +88,10 @@ void matrix_sum(matrix_t *m1, matrix_t *m2, matrix_t *res)
              (m1->rows == res->rows));
 
     int size = m1->rows * m1->columns;
-    size_t size_bytes = size * sizeof(double);
-
-    double *d_m1, *d_m2, *d_res;
-    cudaMalloc(&d_m1, size_bytes);
-    cudaMalloc(&d_m2, size_bytes);
-    cudaMalloc(&d_res, size_bytes);
-
-    cudaMemcpy(d_m1, m1->m, size_bytes, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_m2, m2->m, size_bytes, cudaMemcpyHostToDevice);
-
     int threadsPerBlock = 256;
     int numBlocks = (size + 255) / 256;
-
-    matrix_sum_kernel<<<numBlocks, threadsPerBlock>>>(d_m1, d_m2, d_res, size);
-
-    cudaMemcpy(res->m, d_res, size_bytes, cudaMemcpyDeviceToHost);
-
-    cudaFree(d_m1);
-    cudaFree(d_m2);
-    cudaFree(d_res); 
+    matrix_sum_kernel<<<numBlocks, threadsPerBlock>>>(m1->m, m2->m, res->m, size);
+    cudaDeviceSynchronize();
 }
 
 __global__
@@ -129,26 +113,37 @@ void matrix_minus(matrix_t *m1, matrix_t *m2, matrix_t *res)
              (m1->rows == res->rows));
 
     int size = m1->rows * m1->columns;
-    size_t size_bytes = size * sizeof(double);
-
-    double *d_m1, *d_m2, *d_res;
-    cudaMalloc(&d_m1, size_bytes);
-    cudaMalloc(&d_m2, size_bytes);
-    cudaMalloc(&d_res, size_bytes);
-
-    cudaMemcpy(d_m1, m1->m, size_bytes, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_m2, m2->m, size_bytes, cudaMemcpyHostToDevice);
-
     int threadsPerBlock = 256;
     int numBlocks = (size + 255) / 256;
+    matrix_minus_kernel<<<numBlocks, threadsPerBlock>>>(m1->m, m2->m, res->m, size);
+    cudaDeviceSynchronize();
+}
+*/
 
-    matrix_minus_kernel<<<numBlocks, threadsPerBlock>>>(d_m1, d_m2, d_res, size);
+void matrix_sum(matrix_t *m1, matrix_t *m2, matrix_t *res)
+{
+    assert ( (m1->columns == m2->columns)  &&
+             (m1->columns == res->columns) &&
+             (m1->rows == m2->rows)        &&
+             (m1->rows == res->rows));
 
-    cudaMemcpy(res->m, d_res, size_bytes, cudaMemcpyDeviceToHost);
+    for (int idx = 0; idx < m1->rows * m1->columns; idx ++)
+    { 
+        res->m[idx] = m1->m[idx] + m2->m[idx];
+    }
+}
 
-    cudaFree(d_m1);
-    cudaFree(d_m2);
-    cudaFree(d_res); 
+void matrix_minus(matrix_t *m1, matrix_t *m2, matrix_t *res)
+{
+    assert ( (m1->columns == m2->columns)  &&
+             (m1->columns == res->columns) &&
+             (m1->rows == m2->rows)        &&
+             (m1->rows == res->rows));
+             
+    for (int idx = 0; idx < m1->rows * m1->columns; idx ++)
+    {
+        res->m[idx] = m1->m[idx] - m2->m[idx];
+    }
 }
 
 __global__
@@ -177,40 +172,15 @@ void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res)
            (m1->rows == res->rows)   &&
            (m2->columns == res->columns));
 
-    size_t size_m1  = m1->rows * m1->columns * sizeof(double);
-    size_t size_m2  = m2->rows * m2->columns * sizeof(double);
-    size_t size_res = res->rows * res->columns * sizeof(double);
-
-    // Réalloue seulement si la taille a changé
-    if (size_m1 > d_size_m1) {
-        cudaFree(d_m1);
-        cudaMalloc(&d_m1, size_m1);
-        d_size_m1 = size_m1;
-    }
-    if (size_m2 > d_size_m2) {
-        cudaFree(d_m2);
-        cudaMalloc(&d_m2, size_m2);
-        d_size_m2 = size_m2;
-    }
-    if (size_res > d_size_res) {
-        cudaFree(d_res);
-        cudaMalloc(&d_res, size_res);
-        d_size_res = size_res;
-    }
-
-    cudaMemcpy(d_m1, m1->m, size_m1, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_m2, m2->m, size_m2, cudaMemcpyHostToDevice);
-
     dim3 threadsPerBlock(16, 16);
     dim3 numBlocks((m2->columns + 15) / 16,
                    (m1->rows    + 15) / 16);
 
     matrix_dot_kernel<<<numBlocks, threadsPerBlock>>>(
-        d_m1, d_m2, d_res,
+        m1->m, m2->m, res->m,
         m1->rows, m1->columns, m2->columns
     );
-
-    cudaMemcpy(res->m, d_res, size_res, cudaMemcpyDeviceToHost);
+    cudaDeviceSynchronize();
 }
 
 void matrix_function(matrix_t *m1, double (*f)(double), matrix_t *res)
@@ -238,7 +208,7 @@ void matrix_transpose(matrix_t *m1, matrix_t *res)
     }
 }
 
-__global__
+/*__global__
 void matrix_scalar_kernel(double *m1, double s, double *res, int size)
 {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -255,23 +225,23 @@ void matrix_scalar(matrix_t *m1, double s, matrix_t *res)
              (m1->columns == res->columns));
 
     int size = m1->rows * m1->columns;
-    size_t size_bytes = size * sizeof(double);
-
-    double *d_m1, *d_res;
-    cudaMalloc(&d_m1, size_bytes);
-    cudaMalloc(&d_res, size_bytes);
-
-    cudaMemcpy(d_m1, m1->m, size_bytes, cudaMemcpyHostToDevice);
-
     int threadsPerBlock = 256;
     int numBlocks = (size + 255) / 256;
 
-    matrix_scalar_kernel<<<numBlocks, threadsPerBlock>>>(d_m1, s, d_res, size);
+    matrix_scalar_kernel<<<numBlocks, threadsPerBlock>>>(m1->m, s, res->m, size);
+    cudaDeviceSynchronize();
+}
+*/
 
-    cudaMemcpy(res->m, d_res, size_bytes, cudaMemcpyDeviceToHost);
+void matrix_scalar(matrix_t *m1, double s, matrix_t *res)
+{
+    assert ( (m1->rows == res->rows) &&             
+             (m1->columns == res->columns));
 
-    cudaFree(d_m1);
-    cudaFree(d_res); 
+    for (int idx = 0; idx < m1->columns*m1->rows; idx ++)
+    {
+        res->m[idx] = m1->m[idx] * s;
+    }
 }
 
 void matrix_memcpy(matrix_t *dest, const matrix_t *src)
