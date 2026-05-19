@@ -238,15 +238,40 @@ void matrix_transpose(matrix_t *m1, matrix_t *res)
     }
 }
 
+__global__
+void matrix_scalar_kernel(double *m1, double s, double *res, int size)
+{
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    
+    if (idx < size)
+    {
+        res[idx] = m1[idx] * s;  // multiplication 
+    }
+}
+
 void matrix_scalar(matrix_t *m1, double s, matrix_t *res)
 {
     assert ( (m1->rows == res->rows) &&             
              (m1->columns == res->columns));
 
-    for (int idx = 0; idx < m1->columns*m1->rows; idx ++)
-    {
-        res->m[idx] = m1->m[idx] * s;
-    }
+    int size = m1->rows * m1->columns;
+    size_t size_bytes = size * sizeof(double);
+
+    double *d_m1, *d_res;
+    cudaMalloc(&d_m1, size_bytes);
+    cudaMalloc(&d_res, size_bytes);
+
+    cudaMemcpy(d_m1, m1->m, size_bytes, cudaMemcpyHostToDevice);
+
+    int threadsPerBlock = 256;
+    int numBlocks = (size + 255) / 256;
+
+    matrix_scalar_kernel<<<numBlocks, threadsPerBlock>>>(d_m1, s, d_res, size);
+
+    cudaMemcpy(res->m, d_res, size_bytes, cudaMemcpyDeviceToHost);
+
+    cudaFree(d_m1);
+    cudaFree(d_res); 
 }
 
 void matrix_memcpy(matrix_t *dest, const matrix_t *src)
