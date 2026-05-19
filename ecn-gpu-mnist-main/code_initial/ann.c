@@ -80,6 +80,25 @@ layer_t * create_layer(unsigned layer_number, unsigned number_of_neurons, unsign
     {
         init_weight(layer->weights, nneurons_previous_layer);
     }
+    // temporaires forward
+    layer->z1   = alloc_matrix(number_of_neurons, minibatch_size);
+    layer->z2   = alloc_matrix(number_of_neurons, minibatch_size);
+    layer->one  = alloc_matrix(1, minibatch_size);
+    for (int idx = 0; idx < layer->one->columns * layer->one->rows; idx++)
+        layer->one->m[idx] = 1.0;
+
+    // temporaires backward
+    layer->dfz       = alloc_matrix(number_of_neurons, minibatch_size);
+    layer->tw        = alloc_matrix(nneurons_previous_layer, number_of_neurons);
+    layer->delta_tmp = alloc_matrix(nneurons_previous_layer, minibatch_size);
+    layer->ta        = alloc_matrix(minibatch_size, nneurons_previous_layer);
+    layer->w1        = alloc_matrix(number_of_neurons, nneurons_previous_layer);
+    layer->b1        = alloc_matrix(number_of_neurons, 1);
+    layer->one_b     = alloc_matrix(minibatch_size, 1);
+    for (int idx = 0; idx < layer->one_b->columns * layer->one_b->rows; idx++)
+        layer->one_b->m[idx] = 1.0;
+
+
 
     return layer;
 }
@@ -117,6 +136,46 @@ void print_nn(ann_t *nn)
     }
 }
 
+
+void forward(ann_t *nn, double (*activation_function)(double))
+{
+    for (int l = 1; l < nn->number_of_layers; l++)
+    {
+        matrix_dot(nn->layers[l]->weights, nn->layers[l-1]->activations, nn->layers[l]->z1);
+        matrix_dot(nn->layers[l]->biases, nn->layers[l]->one, nn->layers[l]->z2);
+        matrix_sum(nn->layers[l]->z1, nn->layers[l]->z2, nn->layers[l]->z);
+        matrix_function(nn->layers[l]->z, activation_function, nn->layers[l]->activations);
+    }
+}
+void backward(ann_t *nn, matrix_t *y, double (*derivative_actfunct)(double))
+{
+    unsigned L = nn->number_of_layers-1;
+
+    matrix_minus(nn->layers[L]->activations, y, nn->layers[L]->delta);
+    matrix_function(nn->layers[L]->z, derivative_actfunct, nn->layers[L]->dfz);
+    hadamard_product(nn->layers[L]->delta, nn->layers[L]->dfz, nn->layers[L]->delta);
+    for (int l = L; l > 1; l--)
+    {
+        matrix_transpose(nn->layers[l]->weights, nn->layers[l]->tw);
+        matrix_dot(nn->layers[l]->tw, nn->layers[l]->delta, nn->layers[l]->delta_tmp);
+        matrix_function(nn->layers[l-1]->z, derivative_actfunct, nn->layers[l-1]->dfz);
+        hadamard_product(nn->layers[l]->delta_tmp, nn->layers[l-1]->dfz, nn->layers[l-1]->delta);
+    }
+
+    for (int l = 1; l < nn->number_of_layers; l++)
+    {
+        matrix_transpose(nn->layers[l-1]->activations, nn->layers[l]->ta);
+        matrix_dot(nn->layers[l]->delta, nn->layers[l]->ta, nn->layers[l]->w1);
+        matrix_scalar(nn->layers[l]->w1, nn->alpha / nn->minibatch_size, nn->layers[l]->w1);
+        matrix_minus(nn->layers[l]->weights, nn->layers[l]->w1, nn->layers[l]->weights);
+
+        matrix_dot(nn->layers[l]->delta, nn->layers[l]->one_b, nn->layers[l]->b1);
+        matrix_scalar(nn->layers[l]->b1, nn->alpha / nn->minibatch_size, nn->layers[l]->b1);
+        matrix_minus(nn->layers[l]->biases, nn->layers[l]->b1, nn->layers[l]->biases);
+    }
+}
+
+/*
 void forward(ann_t *nn, double (*activation_function)(double))
 {
     for (int l = 1; l < nn->number_of_layers; l++)
@@ -138,6 +197,9 @@ void forward(ann_t *nn, double (*activation_function)(double))
         destroy_matrix(one);
     }
 }
+
+
+
 
 void backward(ann_t *nn, matrix_t *y, double (*derivative_actfunct)(double))
 {
@@ -195,4 +257,5 @@ void backward(ann_t *nn, matrix_t *y, double (*derivative_actfunct)(double))
         destroy_matrix(one);
         destroy_matrix(b1);
     }
-}
+}*/
+

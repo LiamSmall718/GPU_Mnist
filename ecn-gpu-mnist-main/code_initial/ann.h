@@ -12,11 +12,23 @@ typedef struct
     
     matrix_t* weights;
     matrix_t* biases;
-
     matrix_t* z;
     matrix_t* activations;
-    
     matrix_t* delta;
+
+    // temporaires forward
+    matrix_t* z1;
+    matrix_t* z2;
+    matrix_t* one;
+
+    // temporaires backward
+    matrix_t* dfz;
+    matrix_t* tw;
+    matrix_t* delta_tmp;
+    matrix_t* ta;
+    matrix_t* w1;
+    matrix_t* b1;
+    matrix_t* one_b;
 } layer_t;
 
 typedef struct 
