@@ -51,5 +51,9 @@ extern "C" void matrix_dot(matrix_t *m1, matrix_t *m2, matrix_t *res)
     dim3 blocks((N + TILE-1)/TILE, (M + TILE-1)/TILE);
 
     k_dot<<<blocks, threads>>>(m1->m, m2->m, res->m, M, K, N);
+    cudaError_t err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        printf("CUDA error: %s\n", cudaGetErrorString(err));
+    }
     cudaDeviceSynchronize();
 }

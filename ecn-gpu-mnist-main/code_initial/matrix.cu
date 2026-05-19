@@ -5,10 +5,16 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 matrix_t * alloc_matrix(unsigned rows, unsigned columns)
 {
     matrix_t * res = (matrix_t*) malloc( sizeof(matrix_t) );
-    res->m = (double *) calloc(columns * rows, sizeof(double));
+    //res->m = (double *) calloc(columns * rows, sizeof(double));
+    cudaMallocManaged(&res->m, columns * rows * sizeof(double));
+    cudaMemset(res->m, 0, columns * rows * sizeof(double));
     res->columns = columns;
     res->rows = rows;
     return res;
@@ -17,7 +23,8 @@ matrix_t * alloc_matrix(unsigned rows, unsigned columns)
 void destroy_matrix(matrix_t *m)
 {
     //printf("free %p %p\n", m, m->m);
-    free(m->m);
+    //free(m->m);
+    cudaFree(m->m);
     free(m);
 }
 
@@ -114,7 +121,7 @@ void matrix_function(matrix_t *m1, double (*f)(double), matrix_t *res)
 {
     assert ( (m1->columns == res->columns) &&             
              (m1->rows == res->rows));
-
+    cudaDeviceSynchronize(); // ← attend que matrix_sum soit fini
     for (int idx = 0; idx < m1->rows * m1->columns; idx ++)
     {
         res->m[idx] = f(m1->m[idx]);
@@ -153,3 +160,7 @@ void matrix_memcpy(matrix_t *dest, const matrix_t *src)
 
     memcpy(dest->m, src->m, src->columns * src->rows * sizeof(double));     
 }
+
+#ifdef __cplusplus
+}
+#endif

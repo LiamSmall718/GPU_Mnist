@@ -1,5 +1,5 @@
 // Compile gcc -o ./ann main.c matrix.c ann.c mnist.c -lm
-// complie 2 : nvcc -O3 -arch=sm_75 -o ann main.c ann.c mnist.c matrix.c matrix_dot.cu -lm
+// complie 2 : nvcc -O3 -o ann main.c ann.c mnist.c matrix.cu matrix_dot.cu -lm
 
 #include <stdbool.h>
 #include <stdio.h>

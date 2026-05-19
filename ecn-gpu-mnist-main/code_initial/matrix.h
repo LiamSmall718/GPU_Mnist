@@ -5,6 +5,10 @@
 #include <assert.h>
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct
 {
     double * m;
@@ -44,4 +48,9 @@ void matrix_scalar(matrix_t *m1, double s, matrix_t *res);
 
 void matrix_memcpy(matrix_t *dest, const matrix_t *src);
 
+#endif
+
+
+#ifdef __cplusplus
+}
 #endif
